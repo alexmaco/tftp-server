@@ -29,7 +29,7 @@ path = "src/lib.rs"
 name = "tftp_server"
 path = "src/bin.rs"
 
-[[test]]
-name = "tftp-server-tests"
-path = "tests/test_server.rs"
-harness = false
+#[[test]]
+#name = "tftp-server-tests"
+#path = "tests/test_server.rs"
+#harness = false
