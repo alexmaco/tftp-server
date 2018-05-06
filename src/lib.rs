@@ -12,6 +12,9 @@ pub mod server;
 mod tftp_proto;
 
 #[cfg(test)]
+mod server_tests;
+
+#[cfg(test)]
 mod tftp_proto_tests;
 #[cfg(test)]
 #[macro_use]
