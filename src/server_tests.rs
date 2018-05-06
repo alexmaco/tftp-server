@@ -1,5 +1,6 @@
 use packet::*;
 use server::*;
+use std::net::IpAddr;
 use std::result;
 use std::time::Duration;
 use tftp_proto::{self, *};
@@ -41,13 +42,27 @@ impl<IO: IOAdapter> Proto<IO> for MockProto {
     }
 }
 
+type NopServer = TftpServerImpl<MockProto, FSAdapter>;
+
 #[test]
 fn needs_addresses() {
-    type TestSrv = TftpServerImpl<MockProto, FSAdapter>;
     let mut cfg: ServerConfig = Default::default();
     cfg.addrs = vec![];
     assert!(
-        TestSrv::with_cfg(&cfg).is_err(),
+        NopServer::with_cfg(&cfg).is_err(),
         "server creation succeeded without addresses"
     );
+}
+
+#[test]
+fn binds_to_random_port() {
+    let ip = IpAddr::from([0; 4]);
+
+    let mut cfg: ServerConfig = Default::default();
+    cfg.addrs = vec![(ip, 0)];
+    let s = NopServer::with_cfg(&cfg).unwrap();
+
+    let mut v = vec![];
+    assert!(s.get_local_addrs(&mut v).is_ok());
+    assert_matches!(v.as_slice(), &[addr] if addr.ip() == ip);
 }
