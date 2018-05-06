@@ -402,7 +402,7 @@ impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
     }
 
     /// Stores the local addresses in the provided vec
-    pub fn get_local_addrs(&self, bag: &mut Vec<SocketAddr>) -> Result<()> {
+    pub fn local_addresses(&self, bag: &mut Vec<SocketAddr>) -> Result<()> {
         for socket in self.server_sockets.values() {
             bag.push(socket.local_addr()?);
         }

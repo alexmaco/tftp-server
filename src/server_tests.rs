@@ -63,6 +63,6 @@ fn binds_to_random_port() {
     let s = NopServer::with_cfg(&cfg).unwrap();
 
     let mut v = vec![];
-    assert!(s.get_local_addrs(&mut v).is_ok());
+    assert!(s.local_addresses(&mut v).is_ok());
     assert_matches!(v.as_slice(), &[addr] if addr.ip() == ip);
 }

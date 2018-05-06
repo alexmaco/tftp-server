@@ -33,7 +33,7 @@ pub fn start_server() -> Result<Vec<SocketAddr>> {
     ];
     let mut server = TftpServer::with_cfg(&cfg)?;
     let mut addrs = vec![];
-    server.get_local_addrs(&mut addrs)?;
+    server.local_addresses(&mut addrs)?;
     assert_eq!(addrs.len(), cfg.addrs.len(), "wrong number of addresses");
     thread::spawn(move || {
         if let Err(e) = server.run() {
