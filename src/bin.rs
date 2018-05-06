@@ -63,9 +63,9 @@ fn main() {
             ips.map(|s| {
                 // try parsing in order: first ip:port, then just ip
                 if let Ok(sk) = SocketAddr::from_str(s) {
-                    (sk.ip(), Some(sk.port()))
+                    (sk.ip(), sk.port())
                 } else if let Ok(ip) = IpAddr::from_str(s) {
-                    (ip, None)
+                    (ip, 0)
                 } else {
                     panic!("error parsing argument \"{}\" as ip address", s);
                 }
@@ -73,8 +73,8 @@ fn main() {
         })
         .unwrap_or_else(|| {
             vec![
-                (IpAddr::from([127, 0, 0, 1]), Some(69)),
-                (IpAddr::from([0; 16]), Some(69)),
+                (IpAddr::from([127, 0, 0, 1]), 69),
+                (IpAddr::from([0; 16]), 69),
             ]
         });
 

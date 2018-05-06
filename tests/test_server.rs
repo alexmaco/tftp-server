@@ -28,8 +28,8 @@ pub fn start_server() -> Result<Vec<SocketAddr>> {
     );
 
     cfg.addrs = vec![
-        (IpAddr::from([127, 0, 0, 1]), None),
-        (IpAddr::from([127, 0, 0, 1]), None),
+        (IpAddr::from([127, 0, 0, 1]), 0),
+        (IpAddr::from([127, 0, 0, 1]), 0),
     ];
     let mut server = TftpServer::with_cfg(&cfg)?;
     let mut addrs = vec![];

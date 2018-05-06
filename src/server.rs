@@ -64,7 +64,7 @@ pub struct ServerConfig {
     /// The directory the server will serve from instead of the default
     pub dir: Option<PathBuf>,
     /// The IP addresses (and optionally ports) on which the server must listen
-    pub addrs: Vec<(IpAddr, Option<u16>)>,
+    pub addrs: Vec<(IpAddr, u16)>,
     /// The idle time until a connection with a client is closed
     pub timeout: Duration,
 }
@@ -75,8 +75,8 @@ impl Default for ServerConfig {
             readonly: false,
             dir: None,
             addrs: vec![
-                (IpAddr::from([127, 0, 0, 1]), Some(69)),
-                (IpAddr::from([0; 16]), Some(69)),
+                (IpAddr::from([127, 0, 0, 1]), 69),
+                (IpAddr::from([0; 16]), 69),
             ],
             timeout: Duration::from_secs(3),
         }
@@ -318,7 +318,7 @@ impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
             Ok(packet) => packet,
         };
 
-        let socket = make_bound_socket(local_ip, None)?;
+        let socket = make_bound_socket(local_ip, 0)?;
 
         // send packet back for all cases
         let amt = reply_packet.write_to_slice(buf)?;
@@ -410,8 +410,8 @@ impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
     }
 }
 
-fn make_bound_socket(ip: IpAddr, port: Option<u16>) -> Result<UdpSocket> {
-    let socket = net::UdpSocket::bind((ip, port.unwrap_or(0)))?;
+fn make_bound_socket(ip: IpAddr, port: u16) -> Result<UdpSocket> {
+    let socket = net::UdpSocket::bind((ip, port))?;
 
     socket.set_nonblocking(true)?;
 
