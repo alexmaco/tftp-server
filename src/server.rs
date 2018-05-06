@@ -42,14 +42,14 @@ pub type Result<T> = result::Result<T, TftpError>;
 
 /// The state of an ongoing read/write connection with a client,
 /// corresponding to a single read/write transfer
-struct ConnectionState<IO: IOAdapter> {
+struct ConnectionState<T> {
     /// The UDP socket for the connection that receives ACK, DATA, or ERROR packets.
     socket: UdpSocket,
     /// The timeout for the last packet. Every time a new packet is received, the
     /// timeout is reset.
     timeout: Timeout,
     /// The protocol state associated with this transfer
-    transfer: Transfer<IO>,
+    transfer: T,
     /// The last packets sent.
     /// This is useful when packets have to be resent due to timeouts or other errors
     last_packets: Vec<Vec<u8>>,
@@ -83,9 +83,9 @@ impl Default for ServerConfig {
     }
 }
 
-pub type TftpServer = TftpServerImpl<FSAdapter>;
+pub type TftpServer = TftpServerImpl<TftpServerProto<FSAdapter>, FSAdapter>;
 
-pub struct TftpServerImpl<IO: IOAdapter> {
+pub struct TftpServerImpl<P: Proto<IO>, IO: IOAdapter> {
     /// The ID of a new token used for generating different tokens.
     new_token: Token,
     /// The event loop for handling async events.
@@ -98,12 +98,12 @@ pub struct TftpServerImpl<IO: IOAdapter> {
     /// and creates a new separate UDP connection.
     server_sockets: HashMap<Token, UdpSocket>,
     /// The separate UDP connections for handling multiple requests.
-    connections: HashMap<Token, ConnectionState<IO>>,
+    connections: HashMap<Token, ConnectionState<P::Transfer>>,
     /// The TFTP protocol state machine and filesystem accessor
-    proto_handler: TftpServerProto<IO>,
+    proto_handler: P,
 }
 
-impl<IO: IOAdapter + Default> TftpServerImpl<IO> {
+impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
     /// Creates a new TFTP server from a random open UDP port.
     pub fn new() -> Result<Self> {
         Self::with_cfg(&Default::default())
@@ -156,7 +156,7 @@ impl<IO: IOAdapter + Default> TftpServerImpl<IO> {
             timeout: cfg.timeout,
             server_sockets,
             connections: HashMap::new(),
-            proto_handler: TftpServerProto::new(
+            proto_handler: P::new(
                 Default::default(),
                 IOPolicyCfg {
                     readonly: cfg.readonly,
@@ -210,7 +210,7 @@ impl<IO: IOAdapter + Default> TftpServerImpl<IO> {
         &mut self,
         token: Token,
         socket: UdpSocket,
-        transfer: Transfer<IO>,
+        transfer: P::Transfer,
         packet: &[u8],
         remote: SocketAddr,
     ) -> Result<()> {

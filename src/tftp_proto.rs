@@ -54,6 +54,22 @@ impl Default for FSAdapter {
     }
 }
 
+pub trait Transfer {
+    fn rx(&mut self, p: Packet) -> Result<Response, TftpError>;
+
+    fn timeout(&self) -> Option<Duration>;
+    fn timeout_expired(&mut self) -> ResponseItem;
+    fn is_done(&self) -> bool;
+}
+
+pub trait Proto<IO: IOAdapter> {
+    type Transfer: Transfer;
+
+    fn rx_initial(&mut self, p: Packet) -> (Option<Self::Transfer>, Result<Packet, TftpError>);
+
+    fn new(io: IO, cfg: IOPolicyCfg) -> Self;
+}
+
 #[derive(Debug)]
 struct TransferMeta {
     blocksize: u16,
@@ -102,9 +118,11 @@ pub enum ResponseItem {
     RepeatLast(usize),
 }
 
-impl<IO: IOAdapter> TftpServerProto<IO> {
+impl<IO: IOAdapter> Proto<IO> for TftpServerProto<IO> {
+    type Transfer = TransferImpl<IO>;
+
     /// Creates a new instance with the provided IOAdapter
-    pub fn new(io: IO, cfg: IOPolicyCfg) -> Self {
+    fn new(io: IO, cfg: IOPolicyCfg) -> Self {
         TftpServerProto {
             io_proxy: IOPolicyProxy::new(io, cfg),
         }
@@ -117,10 +135,10 @@ impl<IO: IOAdapter> TftpServerProto<IO> {
     /// received packet
     ///
     /// In both cases the packet contained in the `Result` should be sent back to the client
-    pub fn rx_initial(
+    fn rx_initial(
         &mut self,
         packet: Packet,
-    ) -> (Option<Transfer<IO>>, Result<Packet, TftpError>) {
+    ) -> (Option<Self::Transfer>, Result<Packet, TftpError>) {
         let (filename, mode, mut options, is_write) = match packet {
             Packet::RRQ {
                 filename,
@@ -175,7 +193,7 @@ impl<IO: IOAdapter> TftpServerProto<IO> {
                 _ => return (None, Ok(ErrorCode::FileExists.into())),
             };
 
-            Transfer::<IO>::new_write(fwrite, meta, options)
+            TransferImpl::<IO>::new_write(fwrite, meta, options)
         } else {
             let (fread, len) = match self.io_proxy.open_read(file) {
                 Ok(f) => f,
@@ -186,7 +204,7 @@ impl<IO: IOAdapter> TftpServerProto<IO> {
                 options.push(TftpOption::TransferSize(file_size));
             }
 
-            Transfer::<IO>::new_read(fread, meta, options)
+            TransferImpl::<IO>::new_read(fread, meta, options)
         };
 
         (xfer, Ok(packet))
@@ -195,7 +213,7 @@ impl<IO: IOAdapter> TftpServerProto<IO> {
 
 /// The state of an ongoing transfer with one client
 #[derive(Debug)]
-pub enum Transfer<IO: IOAdapter> {
+pub enum TransferImpl<IO: IOAdapter> {
     Rx(TransferRx<IO::W>),
     Tx(TransferTx<IO::R>),
     Complete,
@@ -217,12 +235,12 @@ pub struct TransferTx<R: Read> {
     meta: TransferMeta,
 }
 
-impl<IO: IOAdapter> Transfer<IO> {
+impl<IO: IOAdapter> TransferImpl<IO> {
     fn new_read(
         fread: IO::R,
         meta: TransferMeta,
         options: Vec<TftpOption>,
-    ) -> (Option<Transfer<IO>>, Packet) {
+    ) -> (Option<Self>, Packet) {
         let mut xfer = TransferTx {
             fread,
             expected_block: 0.into(),
@@ -236,7 +254,7 @@ impl<IO: IOAdapter> Transfer<IO> {
             Ok(Packet::OACK { options })
         };
         match packet {
-            Ok(p) => (Some(Transfer::Tx(xfer)), p),
+            Ok(p) => (Some(TransferImpl::Tx(xfer)), p),
             Err(p) => (None, p),
         }
     }
@@ -245,7 +263,7 @@ impl<IO: IOAdapter> Transfer<IO> {
         fwrite: IO::W,
         meta: TransferMeta,
         options: Vec<TftpOption>,
-    ) -> (Option<Transfer<IO>>, Packet) {
+    ) -> (Option<Self>, Packet) {
         let xfer = TransferRx {
             fwrite,
             expected_block: meta.window_size.into(),
@@ -258,22 +276,24 @@ impl<IO: IOAdapter> Transfer<IO> {
         } else {
             Packet::OACK { options }
         };
-        (Some(Transfer::Rx(xfer)), packet)
+        (Some(TransferImpl::Rx(xfer)), packet)
     }
+}
 
+impl<IO: IOAdapter> Transfer for TransferImpl<IO> {
     /// Checks to see if the transfer has completed
-    pub fn is_done(&self) -> bool {
+    fn is_done(&self) -> bool {
         match *self {
-            Transfer::Complete => true,
+            TransferImpl::Complete => true,
             _ => false,
         }
     }
 
     /// Call this to indicate that the timeout since the last received packet has expired
     /// This may return some packets to (re)send or may terminate the transfer
-    pub fn timeout_expired(&mut self) -> ResponseItem {
+    fn timeout_expired(&mut self) -> ResponseItem {
         let result = match *self {
-            Transfer::Rx(ref mut rx) => {
+            TransferImpl::Rx(ref mut rx) => {
                 if rx.meta.timed_out {
                     ResponseItem::Done
                 } else {
@@ -286,7 +306,7 @@ impl<IO: IOAdapter> Transfer<IO> {
                     }
                 }
             }
-            Transfer::Tx(TransferTx { ref mut meta, .. }) => {
+            TransferImpl::Tx(TransferTx { ref mut meta, .. }) => {
                 if meta.timed_out {
                     ResponseItem::Done
                 } else {
@@ -297,17 +317,17 @@ impl<IO: IOAdapter> Transfer<IO> {
             _ => ResponseItem::Done,
         };
         if let ResponseItem::Done = result {
-            *self = Transfer::Complete;
+            *self = TransferImpl::Complete;
         };
         result
     }
 
     /// Returns the timeout negotiated via option for this transfer,
     /// or NULL if the server default should be used
-    pub fn timeout(&self) -> Option<Duration> {
+    fn timeout(&self) -> Option<Duration> {
         match *self {
-            Transfer::Rx(TransferRx { ref meta, .. })
-            | Transfer::Tx(TransferTx { ref meta, .. }) => {
+            TransferImpl::Rx(TransferRx { ref meta, .. })
+            | TransferImpl::Tx(TransferTx { ref meta, .. }) => {
                 meta.timeout.map(|s| Duration::from_secs(u64::from(s)))
             }
             _ => None,
@@ -319,18 +339,20 @@ impl<IO: IOAdapter> Transfer<IO> {
     /// and all future calls to rx will also return `TftpResult::Done`
     ///
     /// Transfer completion can be checked via `Transfer::is_done()`
-    pub fn rx(&mut self, packet: Packet) -> Result<Response, TftpError> {
+    fn rx(&mut self, packet: Packet) -> Result<Response, TftpError> {
         if self.is_done() {
             return Ok(ResponseItem::Done.into());
         }
         let result = match (packet, &mut *self) {
-            (Packet::ACK(ack_block), &mut Transfer::Tx(ref mut tx)) => Ok(tx.handle_ack(ack_block)),
+            (Packet::ACK(ack_block), &mut TransferImpl::Tx(ref mut tx)) => {
+                Ok(tx.handle_ack(ack_block))
+            }
             (
                 Packet::DATA {
                     block_num,
                     ref data,
                 },
-                &mut Transfer::Rx(ref mut rx),
+                &mut TransferImpl::Rx(ref mut rx),
             ) => Ok(rx.handle_data(block_num, data)),
             (Packet::DATA { .. }, _) | (Packet::ACK(_), _) => {
                 // wrong kind of packet, kill transfer
@@ -348,7 +370,7 @@ impl<IO: IOAdapter> Transfer<IO> {
         };
 
         if let Ok(true) = result.as_ref().map(|r| r.p.contains(&ResponseItem::Done)) {
-            *self = Transfer::Complete;
+            *self = TransferImpl::Complete;
         }
         result
     }
