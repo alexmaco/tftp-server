@@ -111,6 +111,21 @@ impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
 
     /// Creates a new TFTP server from the provided config
     pub fn with_cfg(cfg: &ServerConfig) -> Result<Self> {
+        Self::create(
+            cfg,
+            P::new(
+                Default::default(),
+                IOPolicyCfg {
+                    readonly: cfg.readonly,
+                    path: cfg.dir.clone(),
+                },
+            ),
+        )
+    }
+}
+
+impl<P: Proto<IO>, IO: IOAdapter> TftpServerImpl<P, IO> {
+    pub(crate) fn create(cfg: &ServerConfig, proto_handler: P) -> Result<Self> {
         if cfg.addrs.is_empty() {
             return Err(TftpError::IoError(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -156,13 +171,7 @@ impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
             timeout: cfg.timeout,
             server_sockets,
             connections: HashMap::new(),
-            proto_handler: P::new(
-                Default::default(),
-                IOPolicyCfg {
-                    readonly: cfg.readonly,
-                    path: cfg.dir.clone(),
-                },
-            ),
+            proto_handler,
         })
     }
 
