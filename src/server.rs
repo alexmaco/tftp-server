@@ -327,14 +327,20 @@ impl<P: Proto<IO>, IO: IOAdapter> TftpServerImpl<P, IO> {
             Ok(packet) => packet,
         };
 
-        let socket = make_bound_socket(local_ip, 0)?;
-
-        // send packet back for all cases
         let amt = reply_packet.write_to_slice(buf)?;
-        socket.send_to(&buf[..amt], &src)?;
 
         if let Some(xfer) = xfer {
+            let socket = make_bound_socket(local_ip, 0)?;
+            socket.send_to(&buf[..amt], &src)?;
             self.create_connection(new_conn_token, socket, xfer, &buf[..amt], src)?;
+        } else {
+            match self.server_sockets.get(&token) {
+                Some(socket) => socket.send_to(&buf[..amt], &src)?,
+                None => {
+                    error!("Invalid server token");
+                    return Ok(());
+                }
+            };
         }
 
         Ok(())

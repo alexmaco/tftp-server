@@ -52,8 +52,9 @@ fn initiating_packet_response() {
     tx.send((None, Ok(pack.clone()))).unwrap();
 
     let mut buf = [0; 1024];
-    let (amt, _src) = sock.recv_from(&mut buf).unwrap();
+    let (amt, src) = sock.recv_from(&mut buf).unwrap();
     assert_eq!(&buf[..amt], pack.to_bytes().unwrap().as_slice());
+    assert_eq!(src.port(), addr.port());
 }
 
 type XferStart = (
