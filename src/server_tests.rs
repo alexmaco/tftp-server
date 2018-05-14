@@ -38,17 +38,22 @@ fn binds_to_random_port() {
 }
 
 #[test]
-fn forwards_initiating_packet() {
-    let (proto, rx, _) = proto_with_chans();
+fn initiating_packet_response() {
+    let (proto, rx, tx) = proto_with_chans();
     let addr = create_server(proto);
-    let pack = Packet::RRQ {
-        filename: "f".into(),
-        mode: Octet,
-        options: vec![],
-    };
     let sock = make_socket(None);
+
+    // Note: this does not make protocol sense, we're just testing packet movement
+    let pack = Packet::ACK(33);
     sock.send_to(&pack.to_bytes().unwrap(), &addr).unwrap();
     assert_eq!(rx.recv(), Ok(pack));
+
+    let pack = Packet::ACK(7);
+    tx.send((None, Ok(pack.clone()))).unwrap();
+
+    let mut buf = [0; 1024];
+    let (amt, _src) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], pack.to_bytes().unwrap().as_slice());
 }
 
 
