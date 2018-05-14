@@ -56,7 +56,6 @@ fn initiating_packet_response() {
     assert_eq!(&buf[..amt], pack.to_bytes().unwrap().as_slice());
 }
 
-
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
@@ -143,4 +142,3 @@ fn make_socket(timeout: Option<Duration>) -> UdpSocket {
         Err(e) => panic!("error creating socket: {:?}", e),
     }
 }
-
