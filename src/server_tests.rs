@@ -12,6 +12,18 @@ use packet::TransferMode::*;
 
 type MockedServer = TftpServerImpl<MockProto, FSAdapter>;
 
+/*
+
+How these tests work:
+The idea is we spawn the server on a separate thread, and talk to it via a socket.
+The server uses MockProto and MockTransfer in place of the real ones.
+These 2 have to pairs of channels, and they simply forward and return via the channels in rx_initial and rx
+The test receives, checks, and sends via the channels, alternating with sending/receiving packets via the socket
+
+Note: FSAdapter is just there because rust doesn't have proper higher kinded types. FSAdapter never does anything here
+
+*/
+
 #[test]
 fn needs_addresses() {
     let (proto, _, _) = proto_with_chans();
@@ -57,20 +69,62 @@ fn initiating_packet_response() {
     assert_eq!(src.port(), addr.port());
 }
 
+#[test]
+fn transfer_start_exchange() {
+    let mut buf = [0; 1024];
+    let (proto, rx, tx) = proto_with_chans();
+    let (xfer, trans_rx, trans_tx) = xfer_with_chans();
+    let addr = create_server(proto);
+    let sock = make_socket(None);
+
+    // Note: this does not make protocol sense, we're just testing packet movement
+    let pack = Packet::ACK(33);
+    sock.send_to(&pack.to_bytes().unwrap(), &addr).unwrap();
+
+    let _ = rx.recv().unwrap();
+    tx.send((Some(xfer), Ok(pack.clone()))).unwrap();
+
+    let (amt, remote) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], pack.to_bytes().unwrap().as_slice());
+    assert_ne!(
+        remote.port(),
+        addr.port(),
+        "distinct TID was not allocated for transfer"
+    );
+
+    let pack = Packet::ACK(42);
+    sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
+
+    let pack_from_xfer = trans_rx.recv().unwrap();
+    assert_eq!(pack_from_xfer, pack);
+
+    let resp_pack = Packet::ACK(5);
+    let resp: Response = vec![ResponseItem::Packet(resp_pack.clone())].into();
+    trans_tx.send(Ok(resp));
+
+    let (amt, remote) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], resp_pack.to_bytes().unwrap().as_slice());
+}
+
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
 );
 
-struct MockTransfer;
+struct MockTransfer {
+    tx: Sender<Packet>,
+    rx: Receiver<result::Result<Response, tftp_proto::TftpError>>,
+}
+
 struct MockProto {
     tx: Sender<Packet>,
     rx: Receiver<XferStart>,
 }
 
 impl Transfer for MockTransfer {
-    fn rx(&mut self, _: Packet) -> result::Result<Response, tftp_proto::TftpError> {
-        Ok(ResponseItem::Done.into())
+    fn rx(&mut self, packet: Packet) -> result::Result<Response, tftp_proto::TftpError> {
+        self.tx.send(packet).expect("error sending from transfer");
+        self.rx.recv().expect("error receiving in transfer")
     }
 
     fn timeout(&self) -> Option<Duration> {
@@ -102,6 +156,23 @@ fn proto_with_chans() -> (MockProto, Receiver<Packet>, Sender<XferStart>) {
     let (in_tx, in_rx) = channel();
     (
         MockProto {
+            tx: out_tx,
+            rx: in_rx,
+        },
+        out_rx,
+        in_tx,
+    )
+}
+
+fn xfer_with_chans() -> (
+    MockTransfer,
+    Receiver<Packet>,
+    Sender<result::Result<Response, tftp_proto::TftpError>>,
+) {
+    let (out_tx, out_rx) = channel();
+    let (in_tx, in_rx) = channel();
+    (
+        MockTransfer {
             tx: out_tx,
             rx: in_rx,
         },
