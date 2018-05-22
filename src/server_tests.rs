@@ -78,32 +78,33 @@ fn transfer_start_exchange() {
     let sock = make_socket(None);
 
     // Note: this does not make protocol sense, we're just testing packet movement
-    let pack = Packet::ACK(33);
-    sock.send_to(&pack.to_bytes().unwrap(), &addr).unwrap();
+    let pack_1 = Packet::ACK(33);
+    let pack_2 = Packet::ACK(44);
+    let pack_3 = Packet::ACK(55);
+    let pack_4 = Packet::ACK(66);
+    sock.send_to(&pack_1.to_bytes().unwrap(), &addr).unwrap();
 
     let _ = rx.recv().unwrap();
-    tx.send((Some(xfer), Ok(pack.clone()))).unwrap();
+    tx.send((Some(xfer), Ok(pack_2.clone()))).unwrap();
 
     let (amt, remote) = sock.recv_from(&mut buf).unwrap();
-    assert_eq!(&buf[..amt], pack.to_bytes().unwrap().as_slice());
+    assert_eq!(&buf[..amt], pack_2.to_bytes().unwrap().as_slice());
     assert_ne!(
         remote.port(),
         addr.port(),
         "distinct TID was not allocated for transfer"
     );
 
-    let pack = Packet::ACK(42);
-    sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
+    sock.send_to(&pack_3.to_bytes().unwrap(), &remote).unwrap();
 
     let pack_from_xfer = trans_rx.recv().unwrap();
-    assert_eq!(pack_from_xfer, pack);
+    assert_eq!(pack_from_xfer, pack_3);
 
-    let resp_pack = Packet::ACK(5);
-    let resp: Response = vec![ResponseItem::Packet(resp_pack.clone())].into();
-    trans_tx.send(Ok(resp));
+    let resp: Response = vec![ResponseItem::Packet(pack_4.clone())].into();
+    trans_tx.send(Ok(resp)).unwrap();
 
     let (amt, remote) = sock.recv_from(&mut buf).unwrap();
-    assert_eq!(&buf[..amt], resp_pack.to_bytes().unwrap().as_slice());
+    assert_ne!(remote.port(), addr.port(), "transfer TID not constant");
 }
 
 type XferStart = (
