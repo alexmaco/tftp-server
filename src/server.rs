@@ -83,8 +83,6 @@ impl Default for ServerConfig {
     }
 }
 
-pub type TftpServer = TftpServerImpl<TftpServerProto<FSAdapter>, FSAdapter>;
-
 pub struct TftpServerImpl<P: Proto<IO>, IO: IOAdapter> {
     /// The ID of a new token used for generating different tokens.
     new_token: Token,
@@ -103,7 +101,11 @@ pub struct TftpServerImpl<P: Proto<IO>, IO: IOAdapter> {
     proto_handler: P,
 }
 
-impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
+pub struct Server {
+    inner: TftpServerImpl<TftpServerProto<FSAdapter>, FSAdapter>,
+}
+
+impl Server {
     /// Creates a new TFTP server from a random open UDP port.
     pub fn new() -> Result<Self> {
         Self::with_cfg(&Default::default())
@@ -111,16 +113,27 @@ impl<P: Proto<IO>, IO: IOAdapter + Default> TftpServerImpl<P, IO> {
 
     /// Creates a new TFTP server from the provided config
     pub fn with_cfg(cfg: &ServerConfig) -> Result<Self> {
-        Self::create(
+        let inner = TftpServerImpl::create(
             cfg,
-            P::new(
+            TftpServerProto::new(
                 Default::default(),
                 IOPolicyCfg {
                     readonly: cfg.readonly,
                     path: cfg.dir.clone(),
                 },
             ),
-        )
+        )?;
+        Ok(Self { inner })
+    }
+
+    /// Runs the server's event loop. Will only return on error.
+    pub fn run(&mut self) -> Result<()> {
+        self.inner.run()
+    }
+
+    /// Stores the local addresses in the provided vec
+    pub fn local_addresses(&self, bag: &mut Vec<SocketAddr>) -> Result<()> {
+        self.inner.local_addresses(bag)
     }
 }
 

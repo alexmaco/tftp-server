@@ -11,7 +11,7 @@ use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::thread;
 use std::time::Duration;
 use tftp_server::packet::{ErrorCode, Packet, TftpOption, MAX_PACKET_SIZE};
-use tftp_server::server::{Result, ServerConfig, TftpServer};
+use tftp_server::server::{Result, Server, ServerConfig};
 
 use tftp_server::packet::TransferMode::*;
 
@@ -23,7 +23,7 @@ pub fn start_server() -> Result<Vec<SocketAddr>> {
     let mut cfg: ServerConfig = Default::default();
     cfg.addrs = vec![];
     assert!(
-        TftpServer::with_cfg(&cfg).is_err(),
+        Server::with_cfg(&cfg).is_err(),
         "server creation succeeded without addresses"
     );
 
@@ -31,7 +31,7 @@ pub fn start_server() -> Result<Vec<SocketAddr>> {
         (IpAddr::from([127, 0, 0, 1]), 0),
         (IpAddr::from([127, 0, 0, 1]), 0),
     ];
-    let mut server = TftpServer::with_cfg(&cfg)?;
+    let mut server = Server::with_cfg(&cfg)?;
     let mut addrs = vec![];
     server.local_addresses(&mut addrs)?;
     assert_eq!(addrs.len(), cfg.addrs.len(), "wrong number of addresses");
