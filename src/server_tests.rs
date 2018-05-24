@@ -107,6 +107,34 @@ fn transfer_start_exchange() {
     assert_ne!(remote.port(), addr.port(), "transfer TID not constant");
 }
 
+#[test]
+fn error_for_different_transfer_port() {
+    let mut buf = [0; 1024];
+    let (proto, rx, tx) = proto_with_chans();
+    let (xfer, trans_rx, trans_tx) = xfer_with_chans();
+    let addr = create_server(proto);
+    let sock = make_socket(None);
+
+    // Note: this does not make protocol sense, we're just testing packet movement
+    let pack_1 = Packet::ACK(33);
+    let pack_2 = Packet::ACK(44);
+    let pack_3 = Packet::ACK(55);
+    sock.send_to(&pack_1.to_bytes().unwrap(), &addr).unwrap();
+
+    let _ = rx.recv().unwrap();
+    tx.send((Some(xfer), Ok(pack_2.clone()))).unwrap();
+    let (_, remote) = sock.recv_from(&mut buf).unwrap();
+
+    // now send from different port
+    let sock_2 = make_socket(None);
+    sock_2.send_to(&pack_3.to_bytes().unwrap(), &remote).unwrap();
+
+    // not doing rx from channel, this should not reach the proto impl
+    let (amt, err_remote) = sock.recv_from(&mut buf).unwrap();
+    assert_matches!(Packet::read(&buf[..amt]), Ok(Packet::ERROR { .. }));
+    assert_eq!(err_remote, remote);
+}
+
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
