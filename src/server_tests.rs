@@ -127,7 +127,9 @@ fn error_for_different_transfer_port() {
 
     // now send from different port
     let sock_2 = make_socket(None);
-    sock_2.send_to(&pack_3.to_bytes().unwrap(), &remote).unwrap();
+    sock_2
+        .send_to(&pack_3.to_bytes().unwrap(), &remote)
+        .unwrap();
 
     // not doing rx from channel, this should not reach the proto impl
     let (amt, err_remote) = sock.recv_from(&mut buf).unwrap();
