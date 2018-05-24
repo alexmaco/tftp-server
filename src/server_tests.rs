@@ -176,10 +176,6 @@ impl<IO: IOAdapter> Proto<IO> for MockProto {
         self.tx.send(packet).expect("error sending packet to test");
         self.rx.recv().expect("error receiving packet from test")
     }
-
-    fn new(_: IO, _: IOPolicyCfg) -> Self {
-        panic!("should not be created");
-    }
 }
 
 fn proto_with_chans() -> (MockProto, Receiver<Packet>, Sender<XferStart>) {

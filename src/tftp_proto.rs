@@ -66,8 +66,6 @@ pub trait Proto<IO: IOAdapter> {
     type Transfer: Transfer;
 
     fn rx_initial(&mut self, p: Packet) -> (Option<Self::Transfer>, Result<Packet, TftpError>);
-
-    fn new(io: IO, cfg: IOPolicyCfg) -> Self;
 }
 
 #[derive(Debug)]
@@ -118,15 +116,17 @@ pub enum ResponseItem {
     RepeatLast(usize),
 }
 
-impl<IO: IOAdapter> Proto<IO> for TftpServerProto<IO> {
-    type Transfer = TransferImpl<IO>;
-
+impl<IO: IOAdapter> TftpServerProto<IO> {
     /// Creates a new instance with the provided IOAdapter
-    fn new(io: IO, cfg: IOPolicyCfg) -> Self {
+    pub fn new(io: IO, cfg: IOPolicyCfg) -> Self {
         TftpServerProto {
             io_proxy: IOPolicyProxy::new(io, cfg),
         }
     }
+}
+
+impl<IO: IOAdapter> Proto<IO> for TftpServerProto<IO> {
+    type Transfer = TransferImpl<IO>;
 
     /// Signals the receipt of a transfer-initiating packet (either RRQ or WRQ).
     /// If a `Transfer` is returned in the first tuple member, that must be used to
