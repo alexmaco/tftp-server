@@ -83,7 +83,7 @@ impl Default for ServerConfig {
     }
 }
 
-pub struct TftpServerImpl<P: Proto<IO>, IO: IOAdapter> {
+pub(crate) struct TftpServerImpl<P: Proto<IO>, IO: IOAdapter> {
     /// The ID of a new token used for generating different tokens.
     new_token: Token,
     /// The event loop for handling async events.
