@@ -22,6 +22,8 @@ The test receives, checks, and sends via the channels, alternating with sending/
 
 Note: FSAdapter is just there because rust doesn't have proper higher kinded types. FSAdapter never does anything here
 
+Note: packet exchanges do not make protocol sense, we're just testing packet movement, so only ACKs for simplicity
+
 */
 
 #[test]
@@ -55,7 +57,6 @@ fn initiating_packet_response() {
     let addr = create_server(proto);
     let sock = make_socket(None);
 
-    // Note: this does not make protocol sense, we're just testing packet movement
     let pack = Packet::ACK(33);
     sock.send_to(&pack.to_bytes().unwrap(), &addr).unwrap();
     assert_eq!(rx.recv(), Ok(pack));
@@ -77,7 +78,6 @@ fn transfer_start_exchange() {
     let addr = create_server(proto);
     let sock = make_socket(None);
 
-    // Note: this does not make protocol sense, we're just testing packet movement
     let pack_1 = Packet::ACK(33);
     let pack_2 = Packet::ACK(44);
     let pack_3 = Packet::ACK(55);
@@ -115,7 +115,6 @@ fn error_for_different_transfer_port() {
     let addr = create_server(proto);
     let sock = make_socket(None);
 
-    // Note: this does not make protocol sense, we're just testing packet movement
     let pack_1 = Packet::ACK(33);
     let pack_2 = Packet::ACK(44);
     let pack_3 = Packet::ACK(55);
