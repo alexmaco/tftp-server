@@ -128,7 +128,7 @@ fn error_for_different_transfer_port() {
         .unwrap();
 
     // not doing rx from channel, this should not reach the proto impl
-    let (amt, err_remote) = sock.recv_from(&mut buf).unwrap();
+    let (amt, err_remote) = sock_2.recv_from(&mut buf).unwrap();
     assert_matches!(Packet::read(&buf[..amt]), Ok(Packet::ERROR { .. }));
     assert_eq!(err_remote, remote);
 }

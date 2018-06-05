@@ -373,7 +373,7 @@ impl<P: Proto<IO>, IO: IOAdapter> TftpServerImpl<P, IO> {
         if conn.remote != src {
             // packet from somehere else, reply with error
             let amt = Packet::from(ErrorCode::UnknownID).write_to_slice(buf)?;
-            conn.socket.send_to(&buf[..amt], &conn.remote)?;
+            conn.socket.send_to(&buf[..amt], &src)?;
             return Ok(());
         }
         let packet = Packet::read(&buf[..amt])?;
