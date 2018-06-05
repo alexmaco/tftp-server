@@ -28,7 +28,7 @@ Note: packet exchanges do not make protocol sense, we're just testing packet mov
 
 #[test]
 fn needs_addresses() {
-    let (proto, _, _) = proto_with_chans();
+    let (proto, _, _) = MockProto::new();
     let mut cfg: ServerConfig = Default::default();
     cfg.addrs = vec![];
     assert!(
@@ -43,7 +43,7 @@ fn binds_to_random_port() {
 
     let mut cfg: ServerConfig = Default::default();
     cfg.addrs = vec![(ip, 0)];
-    let (proto, _, _) = proto_with_chans();
+    let (proto, _, _) = MockProto::new();
     let s = MockedServer::create(&cfg, proto).unwrap();
 
     let mut v = vec![];
@@ -72,7 +72,7 @@ fn initiating_packet_response() {
 #[test]
 fn transfer_start_exchange() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx) = xfer_with_chans();
+    let (xfer, trans_rx, trans_tx) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -108,7 +108,7 @@ fn transfer_start_exchange() {
 #[test]
 fn error_for_different_transfer_port() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx) = xfer_with_chans();
+    let (xfer, trans_rx, trans_tx) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -174,39 +174,43 @@ impl<IO: IOAdapter> Proto<IO> for MockProto {
     }
 }
 
-fn proto_with_chans() -> (MockProto, Receiver<Packet>, Sender<XferStart>) {
-    let (out_tx, out_rx) = channel();
-    let (in_tx, in_rx) = channel();
-    (
-        MockProto {
-            tx: out_tx,
-            rx: in_rx,
-        },
-        out_rx,
-        in_tx,
-    )
+impl MockProto {
+    fn new() -> (Self, Receiver<Packet>, Sender<XferStart>) {
+        let (out_tx, out_rx) = channel();
+        let (in_tx, in_rx) = channel();
+        (
+            Self {
+                tx: out_tx,
+                rx: in_rx,
+            },
+            out_rx,
+            in_tx,
+        )
+    }
 }
 
-fn xfer_with_chans() -> (
-    MockTransfer,
-    Receiver<Packet>,
-    Sender<result::Result<Response, tftp_proto::TftpError>>,
-) {
-    let (out_tx, out_rx) = channel();
-    let (in_tx, in_rx) = channel();
-    (
-        MockTransfer {
-            tx: out_tx,
-            rx: in_rx,
-        },
-        out_rx,
-        in_tx,
-    )
+impl MockTransfer {
+    fn new() -> (
+        Self,
+        Receiver<Packet>,
+        Sender<result::Result<Response, tftp_proto::TftpError>>,
+    ) {
+        let (out_tx, out_rx) = channel();
+        let (in_tx, in_rx) = channel();
+        (
+            Self {
+                tx: out_tx,
+                rx: in_rx,
+            },
+            out_rx,
+            in_tx,
+        )
+    }
 }
 
 fn create_server() -> (SocketAddr, Receiver<Packet>, Sender<XferStart>) {
     let (tx, rx) = channel();
-    let (proto, start_rx, start_tx) = proto_with_chans();
+    let (proto, start_rx, start_tx) = MockProto::new();
 
     thread::spawn(move || {
         let mut cfg: ServerConfig = Default::default();
