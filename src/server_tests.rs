@@ -53,8 +53,7 @@ fn binds_to_random_port() {
 
 #[test]
 fn initiating_packet_response() {
-    let (proto, rx, tx) = proto_with_chans();
-    let addr = create_server(proto);
+    let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
     let pack = Packet::ACK(33);
@@ -73,9 +72,8 @@ fn initiating_packet_response() {
 #[test]
 fn transfer_start_exchange() {
     let mut buf = [0; 1024];
-    let (proto, rx, tx) = proto_with_chans();
     let (xfer, trans_rx, trans_tx) = xfer_with_chans();
-    let addr = create_server(proto);
+    let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
     let pack_1 = Packet::ACK(33);
@@ -110,9 +108,8 @@ fn transfer_start_exchange() {
 #[test]
 fn error_for_different_transfer_port() {
     let mut buf = [0; 1024];
-    let (proto, rx, tx) = proto_with_chans();
     let (xfer, trans_rx, trans_tx) = xfer_with_chans();
-    let addr = create_server(proto);
+    let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
     let pack_1 = Packet::ACK(33);
@@ -207,13 +204,14 @@ fn xfer_with_chans() -> (
     )
 }
 
-fn create_server<P: 'static + Proto<FSAdapter> + Send>(proto: P) -> SocketAddr {
+fn create_server() -> (SocketAddr, Receiver<Packet>, Sender<XferStart>) {
     let (tx, rx) = channel();
+    let (proto, start_rx, start_tx) = proto_with_chans();
 
     thread::spawn(move || {
         let mut cfg: ServerConfig = Default::default();
         cfg.addrs = vec![(IpAddr::from([127, 0, 0, 1]), 0)];
-        let mut server = TftpServerImpl::create(&cfg, proto).unwrap();
+        let mut server = MockedServer::create(&cfg, proto).unwrap();
         let mut addrs = vec![];
         server.local_addresses(&mut addrs).unwrap();
         tx.send(addrs[0]).unwrap();
@@ -223,7 +221,7 @@ fn create_server<P: 'static + Proto<FSAdapter> + Send>(proto: P) -> SocketAddr {
         }
     });
 
-    rx.recv().unwrap()
+    (rx.recv().unwrap(), start_rx, start_tx)
 }
 
 fn make_socket(timeout: Option<Duration>) -> UdpSocket {
