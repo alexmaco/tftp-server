@@ -4,6 +4,7 @@ use std::io;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::result;
 use std::sync::mpsc::*;
+use std::sync::*;
 use std::thread;
 use std::time::Duration;
 use tftp_proto::{self, *};
@@ -72,7 +73,7 @@ fn initiating_packet_response() {
 #[test]
 fn transfer_start_exchange() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx) = MockTransfer::new();
+    let (xfer, trans_rx, trans_tx, _) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -108,7 +109,7 @@ fn transfer_start_exchange() {
 #[test]
 fn error_for_different_transfer_port() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx) = MockTransfer::new();
+    let (xfer, trans_rx, trans_tx, _) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -141,6 +142,7 @@ type XferStart = (
 struct MockTransfer {
     tx: Sender<Packet>,
     rx: Receiver<result::Result<Response, tftp_proto::TftpError>>,
+    done: Arc<Mutex<bool>>,
 }
 
 struct MockProto {
@@ -161,7 +163,7 @@ impl Transfer for MockTransfer {
         ResponseItem::Done
     }
     fn is_done(&self) -> bool {
-        true
+        *self.done.lock().expect("error locking 'done'")
     }
 }
 
@@ -194,16 +196,20 @@ impl MockTransfer {
         Self,
         Receiver<Packet>,
         Sender<result::Result<Response, tftp_proto::TftpError>>,
+        Arc<Mutex<bool>>,
     ) {
         let (out_tx, out_rx) = channel();
         let (in_tx, in_rx) = channel();
+        let done = Arc::new(Mutex::new(false));
         (
             Self {
                 tx: out_tx,
                 rx: in_rx,
+                done: done.clone(),
             },
             out_rx,
             in_tx,
+            done,
         )
     }
 }
