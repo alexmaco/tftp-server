@@ -218,18 +218,20 @@ fn create_server() -> (SocketAddr, Receiver<Packet>, Sender<XferStart>) {
     let (tx, rx) = channel();
     let (proto, start_rx, start_tx) = MockProto::new();
 
-    thread::spawn(move || {
-        let mut cfg: ServerConfig = Default::default();
-        cfg.addrs = vec![(IpAddr::from([127, 0, 0, 1]), 0)];
-        let mut server = MockedServer::create(&cfg, proto).unwrap();
-        let mut addrs = vec![];
-        server.local_addresses(&mut addrs).unwrap();
-        tx.send(addrs[0]).unwrap();
+    thread::Builder::new()
+        .name("server_thread".into())
+        .spawn(move || {
+            let mut cfg: ServerConfig = Default::default();
+            cfg.addrs = vec![(IpAddr::from([127, 0, 0, 1]), 0)];
+            let mut server = MockedServer::create(&cfg, proto).unwrap();
+            let mut addrs = vec![];
+            server.local_addresses(&mut addrs).unwrap();
+            tx.send(addrs[0]).unwrap();
 
-        if let Err(e) = server.run() {
-            panic!("run ended with error: {:?}", e);
-        }
-    });
+            if let Err(e) = server.run() {
+                panic!("run ended with error: {:?}", e);
+            }
+        });
 
     (rx.recv().unwrap(), start_rx, start_tx)
 }
