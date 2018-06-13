@@ -9,8 +9,6 @@ use std::thread;
 use std::time::Duration;
 use tftp_proto::{self, *};
 
-use packet::TransferMode::*;
-
 type MockedServer = TftpServerImpl<MockProto, FSAdapter>;
 
 /*
@@ -102,14 +100,14 @@ fn transfer_start_exchange() {
     let resp: Response = vec![ResponseItem::Packet(pack_4.clone())].into();
     trans.tx.send(Ok(resp)).unwrap();
 
-    let (amt, remote) = sock.recv_from(&mut buf).unwrap();
+    let (_, remote) = sock.recv_from(&mut buf).unwrap();
     assert_ne!(remote.port(), addr.port(), "transfer TID not constant");
 }
 
 #[test]
 fn error_for_different_transfer_port() {
     let mut buf = [0; 1024];
-    let (xfer, trans) = MockTransfer::new();
+    let (xfer, _) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -158,7 +156,10 @@ fn transfer_start_end() {
 
     // no packet expected after Done
     sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
-    assert_eq!(trans.rx.recv_timeout(Duration::from_millis(3500)), Err(RecvTimeoutError::Timeout));
+    assert_eq!(
+        trans.rx.recv_timeout(Duration::from_millis(3500)),
+        Err(RecvTimeoutError::Timeout)
+    );
 }
 
 type XferStart = (
@@ -174,7 +175,10 @@ struct TransferHandle {
 
 impl TransferHandle {
     fn set_done(&self, state: bool) {
-        *self.done.lock().expect("error locking done from test thread") = state;
+        *self
+            .done
+            .lock()
+            .expect("error locking done from test thread") = state;
     }
 }
 
@@ -231,10 +235,7 @@ impl MockProto {
 }
 
 impl MockTransfer {
-    fn new() -> (
-        Self,
-        TransferHandle,
-    ) {
+    fn new() -> (Self, TransferHandle) {
         let (out_tx, out_rx) = channel();
         let (in_tx, in_rx) = channel();
         let done = Arc::new(Mutex::new(false));
@@ -270,7 +271,8 @@ fn create_server() -> (SocketAddr, Receiver<Packet>, Sender<XferStart>) {
             if let Err(e) = server.run() {
                 panic!("run ended with error: {:?}", e);
             }
-        });
+        })
+        .expect("cannot spawn server_thread");
 
     (rx.recv().unwrap(), start_rx, start_tx)
 }
