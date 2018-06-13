@@ -162,6 +162,30 @@ fn transfer_start_end() {
     );
 }
 
+#[test]
+fn transfer_start_timeout_repeat() {
+    let mut buf = [0; 1024];
+    let (xfer, trans) = MockTransfer::new();
+    let (addr, rx, tx) = create_server();
+    let sock = make_socket(None);
+
+    let pack_1 = Packet::ACK(33);
+    let pack_2 = Packet::ACK(44);
+
+    sock.send_to(&pack_1.to_bytes().unwrap(), &addr).unwrap();
+    let _ = rx.recv().unwrap();
+
+    tx.send((Some(xfer), Ok(pack_2.clone()))).unwrap();
+    let (_, remote) = sock.recv_from(&mut buf).unwrap();
+
+    thread::sleep(Duration::from_millis(3500));
+    trans.timeout_tx.send(ResponseItem::RepeatLast(1)).unwrap();
+
+    let (amt, remote_2) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], pack_2.to_bytes().unwrap().as_slice());
+    assert_eq!(remote, remote_2, "packet repeated from different address");
+}
+
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
@@ -170,6 +194,7 @@ type XferStart = (
 struct TransferHandle {
     rx: Receiver<Packet>,
     tx: Sender<result::Result<Response, tftp_proto::TftpError>>,
+    timeout_tx: SyncSender<ResponseItem>,
     done: Arc<Mutex<bool>>,
 }
 
@@ -185,6 +210,7 @@ impl TransferHandle {
 struct MockTransfer {
     tx: Sender<Packet>,
     rx: Receiver<result::Result<Response, tftp_proto::TftpError>>,
+    timeout_rx: Receiver<ResponseItem>,
     done: Arc<Mutex<bool>>,
 }
 
@@ -203,7 +229,7 @@ impl Transfer for MockTransfer {
         None
     }
     fn timeout_expired(&mut self) -> ResponseItem {
-        ResponseItem::Done
+        self.timeout_rx.recv().expect("cannot receive timeout response")
     }
     fn is_done(&self) -> bool {
         *self.done.lock().expect("error locking 'done'")
@@ -239,15 +265,18 @@ impl MockTransfer {
         let (out_tx, out_rx) = channel();
         let (in_tx, in_rx) = channel();
         let done = Arc::new(Mutex::new(false));
+        let (timeout_in_tx, timeout_in_rx) = sync_channel(0);
         (
             Self {
                 tx: out_tx,
                 rx: in_rx,
+                timeout_rx: timeout_in_rx,
                 done: done.clone(),
             },
             TransferHandle {
                 rx: out_rx,
                 tx: in_tx,
+                timeout_tx: timeout_in_tx,
                 done,
             },
         )
