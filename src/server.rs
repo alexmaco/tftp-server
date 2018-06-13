@@ -376,14 +376,18 @@ impl<P: Proto<IO>, IO: IOAdapter> TftpServerImpl<P, IO> {
             conn.socket.send_to(&buf[..amt], &src)?;
             return Ok(());
         }
-        let packet = Packet::read(&buf[..amt])?;
 
-        let response = match conn.transfer.rx(packet) {
-            Ok(resp) => resp,
-            Err(e) => {
-                error!("{:?}", e);
-                return Ok(());
+        let response = if !conn.transfer.is_done() {
+            let packet = Packet::read(&buf[..amt])?;
+            match conn.transfer.rx(packet) {
+                Ok(resp) => resp,
+                Err(e) => {
+                    error!("{:?}", e);
+                    return Ok(());
+                }
             }
+        } else {
+            ResponseItem::RepeatLast(1).into()
         };
 
         let mut sent_packets = vec![];

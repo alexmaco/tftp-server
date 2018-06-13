@@ -134,6 +134,33 @@ fn error_for_different_transfer_port() {
     assert_eq!(err_remote, remote);
 }
 
+#[test]
+fn transfer_start_end() {
+    let mut buf = [0; 1024];
+    let (xfer, trans_rx, trans_tx, trans_done) = MockTransfer::new();
+    let (addr, rx, tx) = create_server();
+    let sock = make_socket(None);
+
+    let pack = Packet::ACK(5);
+
+    sock.send_to(&pack.to_bytes().unwrap(), &addr).unwrap();
+    let _ = rx.recv().unwrap();
+
+    tx.send((Some(xfer), Ok(pack.clone()))).unwrap();
+    let (_, remote) = sock.recv_from(&mut buf).unwrap();
+
+    sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
+    let _ = trans_rx.recv().unwrap();
+
+    let resp: Response = ResponseItem::Done.into();
+    *trans_done.lock().unwrap() = true;
+    trans_tx.send(Ok(resp)).unwrap();
+
+    // no packet expected after Done
+    sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
+    assert_eq!(trans_rx.recv_timeout(Duration::from_millis(3500)), Err(RecvTimeoutError::Timeout));
+}
+
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
