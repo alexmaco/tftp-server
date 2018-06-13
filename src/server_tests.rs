@@ -73,7 +73,7 @@ fn initiating_packet_response() {
 #[test]
 fn transfer_start_exchange() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx, _) = MockTransfer::new();
+    let (xfer, trans) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -96,11 +96,11 @@ fn transfer_start_exchange() {
 
     sock.send_to(&pack_3.to_bytes().unwrap(), &remote).unwrap();
 
-    let pack_from_xfer = trans_rx.recv().unwrap();
+    let pack_from_xfer = trans.rx.recv().unwrap();
     assert_eq!(pack_from_xfer, pack_3);
 
     let resp: Response = vec![ResponseItem::Packet(pack_4.clone())].into();
-    trans_tx.send(Ok(resp)).unwrap();
+    trans.tx.send(Ok(resp)).unwrap();
 
     let (amt, remote) = sock.recv_from(&mut buf).unwrap();
     assert_ne!(remote.port(), addr.port(), "transfer TID not constant");
@@ -109,7 +109,7 @@ fn transfer_start_exchange() {
 #[test]
 fn error_for_different_transfer_port() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx, _) = MockTransfer::new();
+    let (xfer, trans) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -137,7 +137,7 @@ fn error_for_different_transfer_port() {
 #[test]
 fn transfer_start_end() {
     let mut buf = [0; 1024];
-    let (xfer, trans_rx, trans_tx, trans_done) = MockTransfer::new();
+    let (xfer, trans) = MockTransfer::new();
     let (addr, rx, tx) = create_server();
     let sock = make_socket(None);
 
@@ -150,21 +150,33 @@ fn transfer_start_end() {
     let (_, remote) = sock.recv_from(&mut buf).unwrap();
 
     sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
-    let _ = trans_rx.recv().unwrap();
+    let _ = trans.rx.recv().unwrap();
 
     let resp: Response = ResponseItem::Done.into();
-    *trans_done.lock().unwrap() = true;
-    trans_tx.send(Ok(resp)).unwrap();
+    trans.set_done(true);
+    trans.tx.send(Ok(resp)).unwrap();
 
     // no packet expected after Done
     sock.send_to(&pack.to_bytes().unwrap(), &remote).unwrap();
-    assert_eq!(trans_rx.recv_timeout(Duration::from_millis(3500)), Err(RecvTimeoutError::Timeout));
+    assert_eq!(trans.rx.recv_timeout(Duration::from_millis(3500)), Err(RecvTimeoutError::Timeout));
 }
 
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
 );
+
+struct TransferHandle {
+    rx: Receiver<Packet>,
+    tx: Sender<result::Result<Response, tftp_proto::TftpError>>,
+    done: Arc<Mutex<bool>>,
+}
+
+impl TransferHandle {
+    fn set_done(&self, state: bool) {
+        *self.done.lock().expect("error locking done from test thread") = state;
+    }
+}
 
 struct MockTransfer {
     tx: Sender<Packet>,
@@ -221,9 +233,7 @@ impl MockProto {
 impl MockTransfer {
     fn new() -> (
         Self,
-        Receiver<Packet>,
-        Sender<result::Result<Response, tftp_proto::TftpError>>,
-        Arc<Mutex<bool>>,
+        TransferHandle,
     ) {
         let (out_tx, out_rx) = channel();
         let (in_tx, in_rx) = channel();
@@ -234,9 +244,11 @@ impl MockTransfer {
                 rx: in_rx,
                 done: done.clone(),
             },
-            out_rx,
-            in_tx,
-            done,
+            TransferHandle {
+                rx: out_rx,
+                tx: in_tx,
+                done,
+            },
         )
     }
 }
