@@ -186,6 +186,39 @@ fn transfer_start_timeout_repeat() {
     assert_eq!(remote, remote_2, "packet repeated from different address");
 }
 
+#[test]
+fn transfer_start_exchange_timeout_repeat() {
+    let mut buf = [0; 1024];
+    let (xfer, trans) = MockTransfer::new();
+    let (addr, rx, tx) = create_server();
+    let sock = make_socket(None);
+
+    let pack_1 = Packet::ACK(33);
+    let pack_2 = Packet::ACK(44);
+    let pack_3 = Packet::ACK(55);
+    let pack_4 = Packet::ACK(66);
+    sock.send_to(&pack_1.to_bytes().unwrap(), &addr).unwrap();
+    let _ = rx.recv().unwrap();
+
+    tx.send((Some(xfer), Ok(pack_2.clone()))).unwrap();
+    let (_, remote) = sock.recv_from(&mut buf).unwrap();
+
+    sock.send_to(&pack_3.to_bytes().unwrap(), &remote).unwrap();
+    let _ = trans.rx.recv().unwrap();
+
+    let resp: Response = vec![ResponseItem::Packet(pack_4.clone())].into();
+    trans.tx.send(Ok(resp)).unwrap();
+
+    let (amt, _) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], pack_4.to_bytes().unwrap().as_slice());
+
+    thread::sleep(Duration::from_millis(3500));
+    trans.timeout_tx.send(ResponseItem::RepeatLast(1)).unwrap();
+
+    let (amt, _) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], pack_4.to_bytes().unwrap().as_slice());
+}
+
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
