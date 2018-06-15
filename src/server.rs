@@ -191,14 +191,16 @@ impl<P: Proto<IO>, IO: IOAdapter> TftpServerImpl<P, IO> {
     /// Returns a new token created from incrementing a counter.
     fn generate_token(&mut self) -> Token {
         use std::usize;
-        if self.connections
+        if self
+            .connections
             .len()
             .saturating_add(self.server_sockets.len())
             .saturating_add(1 /* timer token */) == usize::MAX
         {
             panic!("no more tokens, but impressive amount of memory");
         }
-        while self.new_token == TIMER || self.server_sockets.contains_key(&self.new_token)
+        while self.new_token == TIMER
+            || self.server_sockets.contains_key(&self.new_token)
             || self.connections.contains_key(&self.new_token)
         {
             self.new_token.0 = self.new_token.0.wrapping_add(1);
@@ -236,7 +238,8 @@ impl<P: Proto<IO>, IO: IOAdapter> TftpServerImpl<P, IO> {
         packet: &[u8],
         remote: SocketAddr,
     ) -> Result<()> {
-        let timeout = self.timer
+        let timeout = self
+            .timer
             .set_timeout(transfer.timeout().unwrap_or(self.timeout), token)?;
         self.poll.register(
             &socket,

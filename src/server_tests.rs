@@ -289,7 +289,9 @@ impl Transfer for MockTransfer {
         None
     }
     fn timeout_expired(&mut self) -> ResponseItem {
-        self.timeout_rx.recv().expect("cannot receive timeout response")
+        self.timeout_rx
+            .recv()
+            .expect("cannot receive timeout response")
     }
     fn is_done(&self) -> bool {
         *self.done.lock().expect("error locking 'done'")
