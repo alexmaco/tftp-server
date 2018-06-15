@@ -219,6 +219,33 @@ fn transfer_start_exchange_timeout_repeat() {
     assert_eq!(&buf[..amt], pack_4.to_bytes().unwrap().as_slice());
 }
 
+#[test]
+fn transfer_start_timeout_newpacket() {
+    let mut buf = [0; 1024];
+    let (xfer, trans) = MockTransfer::new();
+    let (addr, rx, tx) = create_server();
+    let sock = make_socket(None);
+
+    let pack_1 = Packet::ACK(33);
+    let pack_2 = Packet::ACK(44);
+    let pack_3 = Packet::ACK(55);
+
+    sock.send_to(&pack_1.to_bytes().unwrap(), &addr).unwrap();
+    let _ = rx.recv().unwrap();
+
+    tx.send((Some(xfer), Ok(pack_2.clone()))).unwrap();
+    let (_, remote) = sock.recv_from(&mut buf).unwrap();
+
+    thread::sleep(Duration::from_millis(3500));
+    trans
+        .timeout_tx
+        .send(ResponseItem::Packet(pack_3.clone()))
+        .unwrap();
+
+    let (amt, _) = sock.recv_from(&mut buf).unwrap();
+    assert_eq!(&buf[..amt], pack_3.to_bytes().unwrap().as_slice());
+}
+
 type XferStart = (
     Option<MockTransfer>,
     result::Result<Packet, tftp_proto::TftpError>,
